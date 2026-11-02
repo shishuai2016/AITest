@@ -84,6 +84,7 @@ export async function renderStudio(root, projectId) {
     elapsedTimer: null,
     es: null,
     pollTimer: null,
+    projectSyncTimer: null,
     finished: false,
     runError: null,
     artifactLoading: new Set(),
@@ -103,6 +104,7 @@ export async function renderStudio(root, projectId) {
     // The job may have just finished while the page was loading.
     checkJobOnce(queryJob);
   }
+  state.projectSyncTimer = setInterval(syncProjectSilently, 5000);
 
   function shell(s) {
     const p = s.data.project;
@@ -735,11 +737,34 @@ export async function renderStudio(root, projectId) {
     document.title = `${data.project.name} · Atoms Studio`;
   }
 
+  async function syncProjectSilently() {
+    if (state.busy || document.visibilityState === 'hidden') return;
+    try {
+      const data = await api.get(`/api/projects/${state.projectId}`);
+      if (state.busy) return;
+      if (data.activeJob) {
+        state.data = data;
+        trackJob(data.activeJob);
+        return;
+      }
+      if (data.project.updatedAt !== state.data.project.updatedAt) {
+        state.data = data;
+        paintAll();
+      }
+    } catch {
+      /* transient network issue; retry next tick */
+    }
+  }
+
   async function syncProject(showToast = false) {
     if (state.busy) return;
     const before = state.data.project.updatedAt;
     try {
       await refreshProject();
+      if (!state.busy && state.activeJob) {
+        trackJob(state.activeJob);
+        return;
+      }
       paintAll();
       if (showToast) toast(state.data.project.updatedAt !== before ? '已同步到最新版本' : '已经是最新版本');
     } catch (error) {
@@ -1329,6 +1354,7 @@ export async function renderStudio(root, projectId) {
   function cleanup() {
     closeEventSource();
     stopElapsed();
+    if (state.projectSyncTimer) clearInterval(state.projectSyncTimer);
     if (state.streamRaf) cancelAnimationFrame(state.streamRaf);
     cleanupFns.forEach((fn) => fn());
     closeModal();
