@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Habit Loop · 让好习惯自己长出来</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <a class="brand" href="#" aria-label="Habit Loop 首页">
+      <span class="loop" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6.2 8.4A7.2 7.2 0 1 1 5 14.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6.4 4.8v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="brand-text">Habit <em>Loop</em></span>
+    </a>
+    <div class="header-meta">
+      <span id="todayLabel">—</span>
+      <button id="addToggle" class="btn-add" type="button">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        新习惯
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="intro">
+      <div>
+        <p class="eyebrow">SMALL THINGS, EVERY DAY</p>
+        <h1>让好习惯<br><span>自己长出来。</span></h1>
+        <p class="intro-copy">不追求完美的一天，只记录真实发生的一点点。连续的小动作，会慢慢变成你想成为的人。</p>
+      </div>
+      <div class="today-card">
+        <div class="progress-ring" aria-label="今日完成进度">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle cx="60" cy="60" r="52" class="ring-bg"></circle>
+            <circle id="todayRing" cx="60" cy="60" r="52" class="ring-fg"></circle>
+          </svg>
+          <div class="ring-center"><strong id="todayPercent">0%</strong><span>今日</span></div>
+        </div>
+        <div class="today-summary">
+          <p class="eyebrow">TODAY</p>
+          <p class="today-count"><strong id="todayDone">0</strong><span id="todayTotal">/ 0</span></p>
+          <p id="todayHint" class="today-hint">今天还没有打卡</p>
+          <div class="streak-line"><span class="flame" aria-hidden="true">✦</span><span id="bestStreak">最长连续 0 天</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="board">
+      <div class="board-head">
+        <div>
+          <p class="eyebrow">YOUR LOOPS</p>
+          <h2>本周习惯</h2>
+        </div>
+        <div class="week-nav" aria-label="本周日期">
+          <span id="weekRange" class="week-range">—</span>
+          <span class="legend"><i class="done"></i>已打卡 <i></i>待完成</span>
+        </div>
+      </div>
+
+      <div id="habitList" class="habit-list" aria-live="polite"></div>
+      <div id="emptyState" class="empty" hidden>
+        <p class="empty-mark" aria-hidden="true">○</p>
+        <h3>从一个很小的习惯开始</h3>
+        <p>比如「每天读 10 分钟」，小到不可能失败。</p>
+        <button id="emptyAdd" class="btn-primary" type="button">添加第一个习惯</button>
+      </div>
+    </section>
+
+    <section class="insights">
+      <div class="insight-card">
+        <div class="insight-head">
+          <div>
+            <p class="eyebrow">28-DAY VIEW</p>
+            <h3>坚持的痕迹</h3>
+          </div>
+          <span id="heatmapTotal" class="heatmap-total">—</span>
+        </div>
+        <div id="heatmap" class="heatmap" role="img" aria-label="最近 28 天打卡热力图"></div>
+        <div class="heatmap-legend"><span>少</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>多</span></div>
+      </div>
+      <div class="insight-card note-card">
+        <p class="eyebrow">A SMALL NOTE</p>
+        <blockquote id="dailyQuote">“你不需要每天都很厉害，你只需要每天都出现。”</blockquote>
+        <p class="note-author">— 给正在坚持的你</p>
+        <div class="quote-dots" id="quoteDots" aria-hidden="true"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Habit Loop · 小步前进，持续发生</span>
+    <button id="resetDemo" class="text-btn" type="button">恢复示例数据</button>
+  </footer>
+</div>
+
+<div id="addPanel" class="add-panel" hidden>
+  <form id="habitForm" class="add-card" autocomplete="off">
+    <div class="add-head">
+      <div>
+        <p class="eyebrow">NEW LOOP</p>
+        <h3>加一个想坚持的小事</h3>
+      </div>
+      <button id="addClose" class="icon-btn" type="button" aria-label="关闭">×</button>
+    </div>
+    <label for="habitName">习惯名称</label>
+    <input id="habitName" type="text" maxlength="24" placeholder="例：睡前读 10 页书">
+    <label for="habitEmoji">选一个图标</label>
+    <div class="emoji-row" id="emojiRow" role="group" aria-label="选择图标">
+      <button class="emoji active" type="button" data-emoji="📖">📖</button>
+      <button class="emoji" type="button" data-emoji="🏃">🏃</button>
+      <button class="emoji" type="button" data-emoji="💧">💧</button>
+      <button class="emoji" type="button" data-emoji="🧘">🧘</button>
+      <button class="emoji" type="button" data-emoji="✍️">✍️</button>
+      <button class="emoji" type="button" data-emoji="🌿">🌿</button>
+    </div>
+    <label>选一个颜色</label>
+    <div class="color-row" id="colorRow" role="group" aria-label="选择颜色">
+      <button class="color active" type="button" data-color="#2f6f5e" style="--c:#2f6f5e" aria-label="松绿"></button>
+      <button class="color" type="button" data-color="#3a6ea5" style="--c:#3a6ea5" aria-label="雾蓝"></button>
+      <button class="color" type="button" data-color="#b5654a" style="--c:#b5654a" aria-label="陶土"></button>
+      <button class="color" type="button" data-color="#8a6fa8" style="--c:#8a6fa8" aria-label="紫藤"></button>
+    </div>
+    <p id="formError" class="form-error" role="alert"></p>
+    <button class="btn-primary" type="submit">开始这个循环</button>
+  </form>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="app.js" defer></script>
+</body>
+</html>
