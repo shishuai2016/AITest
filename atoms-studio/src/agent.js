@@ -240,7 +240,9 @@ export async function runGeneration({ jobId, projectId, prompt, kind = 'generate
     // 2. Design
     setStep(steps, 'design', 'active');
     emitSteps(jobId, steps);
-    const design = await planProduct({ prompt, project, previous: isIterate });
+    const retryLike = /^(继续|重试|重新生成|开始改吧|go on|retry|try again)[。！!\s]*$/i.test(prompt.trim());
+    const generationPrompt = !isIterate && project.current_version === 0 && retryLike && project.prompt ? project.prompt : prompt;
+    const design = await planProduct({ prompt: generationPrompt, project, previous: isIterate });
     if (!isIterate && design.name) {
       updateProjectMeta(projectId, {
         name: design.name,
@@ -259,7 +261,7 @@ export async function runGeneration({ jobId, projectId, prompt, kind = 'generate
     emitSteps(jobId, steps);
 
     // 3. Build
-    const coderMessages = buildCoderMessages({ project, prompt, design, previousFiles, previousSummary: previousVersion?.summary, kind });
+    const coderMessages = buildCoderMessages({ project, prompt: generationPrompt, design, previousFiles, previousSummary: previousVersion?.summary, kind });
     let parsed;
     let validation;
     let llmResult = null;
@@ -318,7 +320,7 @@ export async function runGeneration({ jobId, projectId, prompt, kind = 'generate
       files: parsed.files,
       summary,
       plan: parsed.plan || design.plan?.join('\n') || '',
-      prompt,
+      prompt: generationPrompt,
       model: fallback ? 'local-demo-engine' : llmResult?.model || 'mock',
       usage: llmResult?.usage || {},
       checks,

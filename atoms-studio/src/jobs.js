@@ -101,7 +101,7 @@ export function finishJob(jobId, status, extra = {}) {
     at,
     jobId,
   );
-  const event = status === 'done' ? { type: 'done', ...extra } : { type: 'error', message: extra.error || '生成失败' };
+  const event = status === 'done' ? { type: 'done', jobId, ...extra } : { type: 'error', jobId, message: extra.error || '生成失败' };
   writeEvent(job, event);
   for (const res of job.subscribers) {
     try {

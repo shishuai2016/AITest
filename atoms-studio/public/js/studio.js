@@ -83,6 +83,7 @@ export async function renderStudio(root, projectId) {
     streamRaf: null,
     elapsedTimer: null,
     es: null,
+    pollTimer: null,
     finished: false,
     runError: null,
     artifactLoading: new Set(),
@@ -121,6 +122,7 @@ export async function renderStudio(root, projectId) {
           </div>
         </div>
         <div class="studio-actions" id="studioActions">
+          <button class="icon-btn" type="button" data-action="sync" aria-label="同步最新版本" title="同步最新版本">${icon('refresh')}</button>
           <button class="btn btn-sm btn-ghost" type="button" data-action="share">${icon('share')}<span class="share-label">分享</span></button>
           <button class="btn btn-sm btn-dark" type="button" data-action="new-app">${icon('plus')} <span class="new-label">新建应用</span></button>
           ${themeButton()}
@@ -380,8 +382,9 @@ export async function renderStudio(root, projectId) {
       }
       stage.innerHTML = `<div class="preview-empty" style="width:100%"><div class="preview-empty-inner">
         <div class="preview-empty-mark">${icon('spark')}</div>
-        <h3>还没有可预览的应用</h3>
-        <p>在左侧告诉智能体你想做什么，几十秒后就能看到一个真实可用的应用。</p>
+        <h3>${state.data.project.status === 'error' ? '上一个版本没有生成成功' : '还没有可预览的应用'}</h3>
+        <p>${state.data.project.status === 'error' ? '可以直接用同一个需求重试，不需要重新输入。' : '在左侧告诉智能体你想做什么，几十秒后就能看到一个真实可用的应用。'}</p>
+        ${state.data.project.status === 'error' ? `<button class="btn btn-dark" type="button" data-action="retry">重试生成</button>` : ''}
       </div></div>`;
       return;
     }
@@ -522,17 +525,47 @@ export async function renderStudio(root, projectId) {
     try {
       const job = await api.get(`/api/jobs/${jobId}`);
       if (job.status === 'done') {
-        await refreshProject();
-        paintAll();
-        toast(`v${job.version || state.data.project.currentVersion} 已发布`);
+        await finishSuccess({ version: job.version ? { number: job.version } : null });
       } else if (job.status === 'error') {
-        state.runError = job.error || '任务已结束';
-        state.busy = false;
-        paintAll();
+        await finishError(job.error || '任务已结束');
       }
     } catch {
       /* ignore */
     }
+  }
+
+  function startJobPolling(jobId) {
+    stopJobPolling();
+    // SSE is the primary channel; this poller keeps the UI in sync when a proxy
+    // buffers the event stream or a long-lived connection silently stalls.
+    state.pollTimer = setInterval(async () => {
+      if (!state.busy || state.finished || state.activeJob !== jobId) return;
+      try {
+        const job = await api.get(`/api/jobs/${jobId}`);
+        if (job.steps?.length) {
+          const next = JSON.stringify(job.steps);
+          if (next !== JSON.stringify(state.steps)) {
+            state.steps = job.steps;
+            if (state.tab === 'preview' || state.busy) {
+              paintChat();
+              if (state.tab === 'preview') paintPreview();
+            }
+          }
+        }
+        if (job.status === 'done') {
+          await finishSuccess({ version: job.version ? { number: job.version } : null });
+        } else if (job.status === 'error') {
+          await finishError(job.error || '生成失败');
+        }
+      } catch {
+        /* transient network error; next tick retries */
+      }
+    }, 2500);
+  }
+
+  function stopJobPolling() {
+    if (state.pollTimer) clearInterval(state.pollTimer);
+    state.pollTimer = null;
   }
 
   async function trackJob(jobId) {
@@ -553,6 +586,7 @@ export async function renderStudio(root, projectId) {
     paintChat();
     paintTab();
     startElapsed();
+    stopJobPolling();
     if (state.es) state.es.close();
 
     try {
@@ -569,6 +603,7 @@ export async function renderStudio(root, projectId) {
       }
       paintChat();
       if (state.tab === 'preview') paintPreview();
+      startJobPolling(jobId);
       state.es = new EventSource(`/api/jobs/${jobId}/events`);
       state.es.onmessage = (event) => {
         let payload;
@@ -588,6 +623,9 @@ export async function renderStudio(root, projectId) {
   }
 
   function handleJobEvent(event) {
+    if ((event.type === 'done' || event.type === 'error') && event.jobId && state.activeJob && event.jobId !== state.activeJob) {
+      return;
+    }
     if (event.type === 'steps') {
       state.steps = event.steps || [];
       paintChat();
@@ -672,6 +710,7 @@ export async function renderStudio(root, projectId) {
       state.es = null;
     }
     clearTimeout(state.esFallbackTimer);
+    stopJobPolling();
   }
 
   function startElapsed() {
@@ -694,6 +733,18 @@ export async function renderStudio(root, projectId) {
       state.activeFile = data.current?.files?.[0]?.path || 'index.html';
     }
     document.title = `${data.project.name} · Atoms Studio`;
+  }
+
+  async function syncProject(showToast = false) {
+    if (state.busy) return;
+    const before = state.data.project.updatedAt;
+    try {
+      await refreshProject();
+      paintAll();
+      if (showToast) toast(state.data.project.updatedAt !== before ? '已同步到最新版本' : '已经是最新版本');
+    } catch (error) {
+      if (showToast) toast(error.message, 'error');
+    }
   }
 
   function removeJobQuery() {
@@ -746,6 +797,16 @@ export async function renderStudio(root, projectId) {
     window.location.href = `/api/projects/${p.id}/versions/${version}/download`;
   }
 
+  async function retryGeneration() {
+    if (state.busy) return toast('已有任务在运行', 'error');
+    try {
+      const result = await api.post(`/api/projects/${state.projectId}/retry`, {});
+      await trackJob(result.jobId);
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  }
+
   async function submitPrompt() {
     if (state.busy) return toast('智能体正在处理上一条需求', 'error');
     const input = $('#chatInput');
@@ -767,6 +828,8 @@ export async function renderStudio(root, projectId) {
       }
       state.data.messages = state.data.messages.filter((message) => message.id !== optimistic.id);
       paintChat();
+      const inputEl = $('#chatInput');
+      if (inputEl && !inputEl.value) inputEl.value = value;
       toast(error.message, 'error');
     }
   }
@@ -1174,6 +1237,8 @@ export async function renderStudio(root, projectId) {
       const tab = event.target.closest('[data-tab]');
       if (tab && !tab.dataset.action) { setTab(tab.dataset.tab); return; }
       if (event.target.closest('[data-action="goto-tab"]')) { setTab(event.target.closest('[data-action="goto-tab"]').dataset.tab); return; }
+      if (event.target.closest('[data-action="retry"]')) { retryGeneration(); return; }
+      if (event.target.closest('[data-action="sync"]')) { syncProject(true); return; }
       if (event.target.closest('[data-action="share"]')) { openShare(); return; }
       if (event.target.closest('[data-action="new-app"]')) { window.navigate('/'); return; }
       if (event.target.closest('[data-action="more"]')) { openMore(); return; }
@@ -1241,9 +1306,24 @@ export async function renderStudio(root, projectId) {
     };
     root.addEventListener('input', onInput);
 
+    let lastAutoSync = 0;
+    const autoSync = () => {
+      if (document.visibilityState === 'hidden' || state.busy) return;
+      if (Date.now() - lastAutoSync < 8000) return;
+      lastAutoSync = Date.now();
+      refreshProject()
+        .then((data) => {
+          if (data.project.updatedAt !== state.data.project.updatedAt) paintAll();
+        })
+        .catch(() => {});
+    };
+    document.addEventListener('visibilitychange', autoSync);
+    window.addEventListener('focus', autoSync);
     cleanupFns.push(() => root.removeEventListener('click', onRootClick));
     cleanupFns.push(() => root.removeEventListener('keydown', onKeydown));
     cleanupFns.push(() => root.removeEventListener('input', onInput));
+    cleanupFns.push(() => document.removeEventListener('visibilitychange', autoSync));
+    cleanupFns.push(() => window.removeEventListener('focus', autoSync));
   }
 
   function cleanup() {

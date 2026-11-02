@@ -331,6 +331,18 @@ app.post('/api/projects/:id/messages', (req, res) => {
   res.status(202).json({ jobId });
 });
 
+app.post('/api/projects/:id/retry', (req, res) => {
+  const project = getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: '项目不存在' });
+  if (activeJobForProject(project.id)) return res.status(409).json({ error: '已有任务在运行', jobId: activeJobForProject(project.id) });
+  if (!quotaGuard(res)) return;
+  const prompt = String(req.body?.prompt || project.prompt || '').trim().slice(0, 2000);
+  if (!prompt) return res.status(400).json({ error: '没有可重试的需求内容' });
+  const kind = project.current_version > 0 ? 'iterate' : 'generate';
+  const jobId = startGeneration({ projectId: project.id, prompt, kind });
+  res.status(202).json({ jobId });
+});
+
 app.post('/api/projects/:id/versions/:number/restore', ah(async (req, res) => {
   const project = getProject(req.params.id);
   if (!project) return res.status(404).json({ error: '项目不存在' });
